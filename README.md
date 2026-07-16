@@ -1,12 +1,21 @@
 # WattBar
 
-Tiny macOS menu bar power indicator.
+Tiny macOS menu bar battery-flow and network-activity indicator.
 
 It reads `AppleSmartBattery` telemetry through IOKit every 5 seconds and shows
-net battery watts in the menu bar. The menu includes adapter input, adapter max
-wattage, estimated whole-system watts, charge percentage, and passive receive
-and send rates for the primary network interface. Network figures come from
-macOS byte counters and do not generate any network traffic.
+net battery watts in the menu bar. Positive watts enter the battery; negative
+watts leave it. Power-source notifications trigger immediate and follow-up
+samples around plug and unplug transitions, while telemetry age makes repeated
+underlying samples explicit.
+
+Network figures come from macOS byte counters once per second and do not
+generate any network traffic. WattBar shows current receive/send rates, a
+rolling graph, connection and persistent daily totals, and whether macOS marks
+the current path as an expensive Personal Hotspot or constrained by Low Data
+Mode.
+
+The Preferences menu controls launch at login, graph visibility and duration,
+network totals, bytes-versus-bits display, and battery-flow coloring.
 
 Build:
 
@@ -20,5 +29,5 @@ Run:
 open build/WattBar.app
 ```
 
-Negative watts means the battery is helping power the Mac. Positive watts means
-the battery is gaining charge.
+The larger graph in the menu shows five minutes of network history and rolling
+peaks. The compact menu-bar graph can show 30, 45, or 60 seconds.
