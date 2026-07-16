@@ -57,12 +57,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateNetwork()
         updatePower()
 
-        networkTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        let networkTimer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.updateNetwork() }
         }
-        powerTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+        self.networkTimer = networkTimer
+        RunLoop.main.add(networkTimer, forMode: .common)
+
+        let powerTimer = Timer(timeInterval: 5.0, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.updatePower() }
         }
+        self.powerTimer = powerTimer
+        RunLoop.main.add(powerTimer, forMode: .common)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -104,9 +109,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func scheduleTransitionSamples() {
         transitionTimers.forEach { $0.invalidate() }
         transitionTimers = [1.0, 5.0, 15.0].map { delay in
-            Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+            let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
                 Task { @MainActor in self?.updatePower() }
             }
+            RunLoop.main.add(timer, forMode: .common)
+            return timer
         }
     }
 
