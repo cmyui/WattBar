@@ -24,6 +24,7 @@ struct NetworkSnapshot {
     let interfaceName: String
     let receivedBytesPerSecond: Double?
     let sentBytesPerSecond: Double?
+    let rateInterval: TimeInterval?
     let receivedBytesForConnection: UInt64
     let sentBytesForConnection: UInt64
     let receivedBytesToday: UInt64
@@ -32,7 +33,7 @@ struct NetworkSnapshot {
     let isConstrained: Bool
 }
 
-struct NetworkSample {
+struct NetworkSample: Equatable {
     let received: Double
     let sent: Double
 }

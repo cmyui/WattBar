@@ -45,6 +45,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var telemetryChangedOnLastRead = false
     private var lastProvidingPowerSource: String?
     private var networkHistory: [NetworkSample] = []
+    private var pendingHistorySeconds: TimeInterval = 0
+    private var isMenuOpen = false
+    private var statusTitle: NSAttributedString?
+    private var statusGraphSamples: [NetworkSample]?
+
+    // Sample every second while the menu's graph is visible; the menu bar alone needs less.
+    private var networkInterval: TimeInterval { isMenuOpen ? 1 : 2 }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -53,21 +60,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         configureMenu()
         configurePowerSourceNotification()
+        configureDisplaySleepNotifications()
         lastProvidingPowerSource = providingPowerSource()
         updateNetwork()
         updatePower()
-
-        let networkTimer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.updateNetwork() }
-        }
-        self.networkTimer = networkTimer
-        RunLoop.main.add(networkTimer, forMode: .common)
-
-        let powerTimer = Timer(timeInterval: 5.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.updatePower() }
-        }
-        self.powerTimer = powerTimer
-        RunLoop.main.add(powerTimer, forMode: .common)
+        startTimers()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -75,8 +72,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func menuWillOpen(_ menu: NSMenu) {
+        isMenuOpen = true
         updatePreferenceStates()
-        updateTelemetryLine()
+        updateNetwork()
+        scheduleNetworkTimer()
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        isMenuOpen = false
+        scheduleNetworkTimer()
+    }
+
+    private func startTimers() {
+        scheduleNetworkTimer()
+        powerTimer?.invalidate()
+        powerTimer = makeTimer(interval: 5, repeats: true) { [weak self] in self?.updatePower() }
+    }
+
+    private func scheduleNetworkTimer() {
+        networkTimer?.invalidate()
+        networkTimer = makeTimer(interval: networkInterval, repeats: true) { [weak self] in self?.updateNetwork() }
+    }
+
+    // Tolerance lets macOS coalesce these wakeups with other timers instead of waking the CPU separately.
+    private func makeTimer(interval: TimeInterval, repeats: Bool, action: @escaping @MainActor @Sendable () -> Void) -> Timer {
+        let timer = Timer(timeInterval: interval, repeats: repeats) { _ in
+            Task { @MainActor in action() }
+        }
+        timer.tolerance = interval / 10
+        RunLoop.main.add(timer, forMode: .common)
+        return timer
+    }
+
+    // Nobody can see the menu bar while the displays sleep, so stop sampling until they wake.
+    private func configureDisplaySleepNotifications() {
+        let center = NSWorkspace.shared.notificationCenter
+        center.addObserver(self, selector: #selector(displaysDidSleep), name: NSWorkspace.screensDidSleepNotification, object: nil)
+        center.addObserver(self, selector: #selector(displaysDidWake), name: NSWorkspace.screensDidWakeNotification, object: nil)
+    }
+
+    @objc private func displaysDidSleep() {
+        networkTimer?.invalidate()
+        powerTimer?.invalidate()
+    }
+
+    @objc private func displaysDidWake() {
+        updateNetwork()
+        updatePower()
+        startTimers()
     }
 
     private func configurePowerSourceNotification() {
@@ -109,11 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func scheduleTransitionSamples() {
         transitionTimers.forEach { $0.invalidate() }
         transitionTimers = [1.0, 5.0, 15.0].map { delay in
-            let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
-                Task { @MainActor in self?.updatePower() }
-            }
-            RunLoop.main.add(timer, forMode: .common)
-            return timer
+            makeTimer(interval: delay, repeats: false) { [weak self] in self?.updatePower() }
         }
     }
 
@@ -169,8 +208,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateNetworkMenu(snapshot)
 
         if let received = snapshot?.receivedBytesPerSecond,
-           let sent = snapshot?.sentBytesPerSecond {
-            networkHistory.append(NetworkSample(received: received, sent: sent))
+           let sent = snapshot?.sentBytesPerSecond,
+           let rateInterval = snapshot?.rateInterval {
+            // History holds one sample per second, so the graphs' time windows hold at any sampling interval.
+            pendingHistorySeconds += rateInterval
+            let seconds = Int(pendingHistorySeconds.rounded())
+            pendingHistorySeconds -= Double(seconds)
+            networkHistory.append(contentsOf: repeatElement(NetworkSample(received: received, sent: sent), count: seconds))
             if networkHistory.count > Self.networkHistoryLimit {
                 networkHistory.removeFirst(networkHistory.count - Self.networkHistoryLimit)
             }
@@ -255,9 +299,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func updateGraphVisibility() {
         graphItem.isHidden = !settings.showGraph
-        statusItem.button?.image = settings.showGraph
-            ? NetworkGraphRenderer.statusImage(samples: networkHistory, window: settings.graphWindow)
-            : nil
+        // Redraw the menu bar graph only when the samples it shows have changed.
+        let samples = settings.showGraph ? Array(networkHistory.suffix(settings.graphWindow)) : nil
+        guard samples != statusGraphSamples else { return }
+        statusGraphSamples = samples
+        statusItem.button?.image = samples.flatMap { NetworkGraphRenderer.statusImage(samples: $0, window: $0.count) }
         statusItem.button?.imagePosition = .imageTrailing
     }
 
@@ -281,6 +327,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             title.append(NSAttributedString(string: "  ", attributes: [.font: font]))
             title.append(NSAttributedString(string: "↑\(compactRate(sent))", attributes: [.font: font, .foregroundColor: NSColor.systemRed]))
         }
+        guard title != statusTitle else { return }
+        statusTitle = title
         statusItem.button?.attributedTitle = title
     }
 

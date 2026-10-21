@@ -8,11 +8,15 @@ watts leave it. Power-source notifications trigger immediate and follow-up
 samples around plug and unplug transitions, while telemetry age makes repeated
 underlying samples explicit.
 
-Network figures come from macOS byte counters once per second and do not
-generate any network traffic. WattBar shows current receive/send rates, a
-rolling graph, connection and persistent daily totals, and whether macOS marks
-the current path as an expensive Personal Hotspot or constrained by Low Data
-Mode.
+Network figures come from macOS byte counters, read every second while the
+menu is open and every two seconds otherwise, and do not generate any network
+traffic. WattBar shows current receive/send rates, a rolling graph, connection
+and persistent daily totals, and whether macOS marks the current path as an
+expensive Personal Hotspot or constrained by Low Data Mode.
+
+Sampling pauses while the displays sleep and resumes with a fresh sample when
+they wake. Traffic during the pause counts toward the totals but not toward
+the rates or graphs.
 
 The Preferences menu controls launch at login, graph visibility and duration,
 network totals, bytes-versus-bits display, and battery-flow coloring.
