@@ -12,12 +12,15 @@ mkdir -p "$MACOS_DIR"
 
 xcrun swiftc \
   -O \
+  -warnings-as-errors \
   -parse-as-library \
   -target arm64-apple-macos13.0 \
   -framework AppKit \
   -framework IOKit \
+  -framework Network \
+  -framework ServiceManagement \
   -framework SystemConfiguration \
-  "$ROOT_DIR/Sources/WattBar.swift" \
+  "$ROOT_DIR"/Sources/*.swift \
   -o "$MACOS_DIR/$APP_NAME"
 
 cp "$ROOT_DIR/Resources/Info.plist" "$CONTENTS_DIR/Info.plist"
