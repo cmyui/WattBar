@@ -2,6 +2,8 @@
 
 Tiny macOS menu bar battery-flow and network-activity indicator.
 
+<img width="487" height="481" alt="image" src="https://github.com/user-attachments/assets/f4823ab8-9f38-4170-80e9-a3b5069030e4" />
+
 It reads `AppleSmartBattery` telemetry through IOKit every 5 seconds and shows
 net battery watts in the menu bar. Positive watts enter the battery; negative
 watts leave it. Power-source notifications trigger immediate and follow-up
