@@ -33,6 +33,12 @@ struct NetworkSnapshot {
     let isConstrained: Bool
 }
 
+struct TemperatureSnapshot {
+    let socCelsius: Double?
+    let batteryCelsius: Double?
+    let ssdCelsius: Double?
+}
+
 struct NetworkSample: Equatable {
     let received: Double
     let sent: Double

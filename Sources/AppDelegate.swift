@@ -16,6 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private let powerSampler = PowerSampler()
     private let networkSampler = NetworkSampler()
+    private let temperatureSampler = TemperatureSampler()
+    private let temperatureQueue = DispatchQueue(label: "com.cmyui.WattBar.temperature")
     private let settings = AppSettings()
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
@@ -24,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let batteryItem = NSMenuItem()
     private let sourceItem = NSMenuItem()
     private let telemetryItem = NSMenuItem()
+    private let temperatureItem = NSMenuItem(title: "Temperature: measuring…", action: nil, keyEquivalent: "")
     private let networkItem = NSMenuItem()
     private let connectionTotalItem = NSMenuItem()
     private let dailyTotalItem = NSMenuItem()
@@ -74,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         isMenuOpen = true
         updatePreferenceStates()
+        updateTemperatures()
         updateNetwork()
         scheduleNetworkTimer()
     }
@@ -157,7 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func configureMenu() {
-        for item in [headlineItem, adapterItem, batteryItem, sourceItem, telemetryItem, networkItem, connectionTotalItem, dailyTotalItem] {
+        for item in [headlineItem, adapterItem, batteryItem, sourceItem, telemetryItem, temperatureItem, networkItem, connectionTotalItem, dailyTotalItem] {
             item.isEnabled = false
             menu.addItem(item)
         }
@@ -229,6 +233,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func updatePower() {
+        // Temperatures appear only in the menu, so read the sensors only while it is open.
+        if isMenuOpen { updateTemperatures() }
+
         guard let snapshot = powerSampler.sample() else {
             lastSnapshot = nil
             headlineItem.title = "Battery net: unavailable"
@@ -273,6 +280,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             telemetryItem.title = "Telemetry age: unavailable"
         }
+    }
+
+    // Reading the sensors takes about 15 ms on an M3 Max, so it runs off the main thread.
+    private func updateTemperatures() {
+        guard let temperatureSampler else {
+            temperatureItem.title = "Temperature: unavailable"
+            return
+        }
+        temperatureQueue.async { [weak self] in
+            let snapshot = temperatureSampler.sample()
+            Task { @MainActor in self?.showTemperatures(snapshot) }
+        }
+    }
+
+    private func showTemperatures(_ snapshot: TemperatureSnapshot) {
+        let parts = [
+            snapshot.socCelsius.map { "SoC \(celsius($0))" },
+            snapshot.batteryCelsius.map { "battery \(celsius($0))" },
+            snapshot.ssdCelsius.map { "SSD \(celsius($0))" }
+        ].compactMap { $0 }
+        temperatureItem.title = parts.isEmpty ? "Temperature: unavailable" : "Temperature: \(parts.joined(separator: " · "))"
     }
 
     private func updateNetworkMenu(_ snapshot: NetworkSnapshot?) {
@@ -380,6 +408,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func format(_ value: Double) -> String { String(format: "%.1f", value) }
     private func signedFormat(_ value: Double) -> String { String(format: "%+.1f", value) }
+    private func celsius(_ value: Double) -> String { String(format: "%.0f °C", value) }
 
     private func duration(_ seconds: TimeInterval) -> String {
         if seconds < 60 { return "\(Int(seconds))s" }
@@ -466,7 +495,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func copySnapshot() {
-        let text = [headlineItem, adapterItem, batteryItem, sourceItem, telemetryItem, networkItem, connectionTotalItem, dailyTotalItem]
+        let text = [headlineItem, adapterItem, batteryItem, sourceItem, telemetryItem, temperatureItem, networkItem, connectionTotalItem, dailyTotalItem]
             .map(\.title)
             .joined(separator: "\n")
         NSPasteboard.general.clearContents()
