@@ -16,6 +16,12 @@ traffic. WattBar shows current receive/send rates, a rolling graph, connection
 and persistent daily totals, and whether macOS marks the current path as an
 expensive Personal Hotspot or constrained by Low Data Mode.
 
+Temperatures come from Apple silicon's built-in sensors, read through IOKit's
+HID event system when the menu opens and every 5 seconds while it stays open.
+The menu shows the hottest SoC die sensor, battery sensor, and SSD sensor.
+The sensor interface is undocumented and sensor names vary by chip, so a
+component without a recognized sensor is left out.
+
 Sampling pauses while the displays sleep and resumes with a fresh sample when
 they wake. Traffic during the pause counts toward the totals but not toward
 the rates or graphs.
